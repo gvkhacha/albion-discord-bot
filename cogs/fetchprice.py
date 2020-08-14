@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import configparser
 import os
+from scripts import common_names
 
 
 class FetchPrice(commands.Cog):
@@ -60,16 +61,8 @@ class FetchPrice(commands.Cog):
         self.historyURL = "https://www.albion-online-data.com/api/v2/stats/charts/"
         self.historyLocationURL = "&locations=Thetford,Martlock,Caerleon,Lymhurst,Bridgewatch,FortSterling,ArthursRest,MerlynsRest,MorganasRest,BlackMarket"
 
-        # Bot will search items through this list
-        # There are also different localization names
-        self.itemList = "https://raw.githubusercontent.com/broderickhyman/ao-bin-dumps/master/formatted/items.json"
-
-        # Open list of items
-        try:
-            with urllib.request.urlopen(self.itemList) as url:
-                self.itemData = json.loads(url.read().decode())
-        except Exception as e:
-            print(e)
+        # Bot fetches data once, adds common names, and saves locally
+        self.itemData = common_names.getItemsList()
 
     @commands.command(
         aliases=["price", "quick",]
@@ -340,6 +333,11 @@ class FetchPrice(commands.Cog):
             except:
                 jDists.append([1, i])
 
+            # Calculate distance using common names
+            w1 = inputWord.lower()
+            for cname in indivData["CommonNames"]:
+                jDist = 1 - difflib.SequenceMatcher(None, w1, cname.lower()).ratio()
+                jDists.append([jDist, i])
         # Sort JDists
         # Closest match has lowest distance
         jDists = sorted(jDists)
