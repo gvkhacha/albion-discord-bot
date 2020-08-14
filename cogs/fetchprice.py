@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import configparser
 import os
+import re
 from utils import common_names, emojis
 
 
@@ -22,7 +23,10 @@ class FetchPrice(commands.Cog):
             Also send plot of 7 days historical prices.
                 - quick (part of prices)
                     Same as prices command but without plots (faster).
-
+    Listener:
+        - raw reaction add
+            Watches for tier reactions (1,2,3) relating to suggested items in price check
+            Will make another request/embed/message for the new item
     Functions:
         - item_match(item)
             Find closest matching item name/ID of input item.
@@ -31,6 +35,9 @@ class FetchPrice(commands.Cog):
         - grabHistory(item)
             Get item's 7 days historical prices for all cities.
             Plots them out to 'plot.png'.
+        - _createEmbed(itemName: str, itemId: str, altNames=[], altIds=[])
+            Uses item name and id to get data, creates embed table (NOT plots)
+            Adds suggestions if altnames/altIds is not empty
     """
 
     def __init__(self, client):
@@ -95,7 +102,7 @@ class FetchPrice(commands.Cog):
         itemNames, itemIDs = self.item_match(item)
 
         # Grab prices from full URL
-        em = await self._createEmbed(itemNames[0], itemIDs[0], itemNames[1:], itemIDs[1:])
+        em = self._createEmbed(itemNames[0], itemIDs[0], itemNames[1:], itemIDs[1:])
 
         if not any(["quick" in c.lower() for c in command[:2]]):
             # Skip plotting if command is quick
@@ -126,6 +133,34 @@ class FetchPrice(commands.Cog):
     async def prices_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send("Please specify item.")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, rawReaction):
+        """
+        Checks for tier reactions based on suggestions
+        Makes another request for the new item
+        Sends another message
+        does NOT add more suggestions
+        """
+
+        # Get reacted message
+        channel = await self.client.fetch_channel(rawReaction.channel_id)
+        msg = await channel.fetch_message(rawReaction.message_id)
+
+        # Get user who reacted and the reaction emoji
+        user = self.client.get_user(rawReaction.user_id)
+        emoji = rawReaction.emoji
+        if (msg.author == self.client.user and user != self.client.user):
+            r = str(emoji)
+            for field in msg.embeds[0].to_dict()['fields']:
+                if field['name'].startswith("Suggestions"):
+                    text = field['value']
+                    match = re.search(f"{r}: ([\w|'|\s]+)\(([\w|@]+)\)", text)
+                    name = match.group(1)
+                    item = match.group(2)
+                    em = self._createEmbed(name, item)
+                    msg = await channel.send(embed = em)
+                    await msg.add_reaction("\u274c")
 
     def item_match(self, inputWord):
         """Find closest matching item name and ID of input item.
@@ -407,7 +442,7 @@ class FetchPrice(commands.Cog):
 
         return
 
-    async def _createEmbed(self, itemName: str, itemId: str, altNames=[], altIds=[]) -> 'discord embed':
+    def _createEmbed(self, itemName: str, itemId: str, altNames=[], altIds=[]) -> 'discord embed':
         """ Extracting embed to make consecutive calls easier"""
         fullURL = self.apiURL + itemId + self.locationURL
         with urllib.request.urlopen(fullURL) as url:
@@ -547,7 +582,7 @@ class FetchPrice(commands.Cog):
             tierEmojis = emojis.getTierEmojis()
             em.add_field(
                 name="Suggestions:",
-                value='\n'.join([f"{tierEmojis[i]} {altNames[i]} ({altIds[i]})" for i in range(len(altNames))]),
+                value='\n'.join([f"{tierEmojis[i]}: {altNames[i]} ({altIds[i]})" for i in range(len(altNames))]),
                 inline=False,
             )
 
