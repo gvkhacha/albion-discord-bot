@@ -10,7 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import configparser
 import os
-from scripts import common_names
+from utils import common_names, emojis
 
 
 class FetchPrice(commands.Cog):
@@ -114,7 +114,7 @@ class FetchPrice(commands.Cog):
             msg = await ctx.send(embed=em)
 
         # Add delete reaction button
-        await msg.add_reaction("\u274c")
+        await self._addReactions(msg)
 
         if self.debug:
             await self.debugChannel.send(
@@ -544,9 +544,10 @@ class FetchPrice(commands.Cog):
         # Good for people if they don't remember item's name and type wrongly
         # Will add reactions based on this to make calling them easier
         if(altNames != []):
+            tierEmojis = emojis.getTierEmojis()
             em.add_field(
                 name="Suggestions:",
-                value='\n'.join([f"{altNames[i]} ({altIds[i]})" for i in range(len(altNames))]),
+                value='\n'.join([f"{tierEmojis[i]} {altNames[i]} ({altIds[i]})" for i in range(len(altNames))]),
                 inline=False,
             )
 
@@ -558,6 +559,17 @@ class FetchPrice(commands.Cog):
         # \u274c is a red X
         em.set_footer(text="React with \u274c to delete this post.")
         return em
+
+    async def _addReactions(self, msg) -> None:
+        # First add delete reaction
+        await msg.add_reaction("\u274c")
+        try:
+            tierEmojis = emojis.getTierEmojis()
+            for i in range(3):
+                await msg.add_reaction(tierEmojis[i])
+        except Exception as e:
+            print(e)
+
 
 def setup(client):
     client.add_cog(FetchPrice(client))
